@@ -117,6 +117,7 @@ class BuildPointCloud:
         image: Union[str, np.ndarray],
         down_sampling: Union[float, None] = None,
         as_2d=False,
+        skeleton: bool = True,
     ) -> Union[Tuple[ndarray, ndarray], np.ndarray]:
         """
         Generates a point cloud from an input image through skeletonization, with optional
@@ -153,7 +154,9 @@ class BuildPointCloud:
             return e, e
 
         """Skeletonization"""
-        if image.ndim == 2:
+        if not skeleton:
+            image_point = image
+        elif image.ndim == 2:
             image_point = skeletonize(image)
         elif as_2d:
             image_point = np.zeros(image.shape, dtype=np.uint8)

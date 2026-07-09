@@ -1,0 +1,11 @@
+name: tardis-em
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pytorch-gpu # conda-forge selects a cuda build matching the gpu node driver
+  - pip
+  - pip:
+      - -r requirements.txt # torch>2.0.0 here is satisfied by conda pytorch, so pip skips it
+      - h5py                
+      - mrcfile            
