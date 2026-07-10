@@ -15,7 +15,7 @@ from typing import Tuple, Union
 import numpy as np
 import pandas as pd
 from numpy import ndarray
-from skimage.morphology import skeletonize
+from skimage.morphology import skeletonize as skimage_skeletonize
 
 from tardis_em.dist_pytorch.utils.utils import VoxelDownSampling
 from tardis_em.utils.errors import TardisError
@@ -117,7 +117,7 @@ class BuildPointCloud:
         image: Union[str, np.ndarray],
         down_sampling: Union[float, None] = None,
         as_2d=False,
-        skeleton: bool = True,
+        skeletonize: bool = True,
     ) -> Union[Tuple[ndarray, ndarray], np.ndarray]:
         """
         Generates a point cloud from an input image through skeletonization, with optional
@@ -154,17 +154,17 @@ class BuildPointCloud:
             return e, e
 
         """Skeletonization"""
-        if not skeleton:
+        if not skeletonize:
             image_point = image
         elif image.ndim == 2:
-            image_point = skeletonize(image)
+            image_point = skimage_skeletonize(image)
         elif as_2d:
             image_point = np.zeros(image.shape, dtype=np.uint8)
 
             for i in range(image_point.shape[0]):
-                image_point[i, :] = np.where(skeletonize(image[i, :]), 1, 0)
+                image_point[i, :] = np.where(skimage_skeletonize(image[i, :]), 1, 0)
         else:
-            image_point = skeletonize(image)
+            image_point = skimage_skeletonize(image)
         image_point = np.where(image_point > 0)
 
         """CleanUp to avoid memory loss"""

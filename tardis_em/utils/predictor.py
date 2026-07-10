@@ -22,7 +22,7 @@ import pandas as pd
 import tifffile.tifffile as tif
 import torch
 
-from tardis_em.dist_pytorch.utils.utils import VoxelDownSampling
+from tardis_em.dist_pytorch.utils.utils import VoxelDownSampling, merge_close_points
 
 from tardis_em.dist_pytorch.datasets.patches import PatchDataSet
 from tardis_em.dist_pytorch.dist import build_dist_network
@@ -116,6 +116,7 @@ class GeneralPredictor:
         amira_inter_probability: float = None,
         tardis_logo: bool = True,
         continue_b: bool = False,
+        skeletonize: bool = True,
     ):
         """
         This class initializes the configuration and parameters required for predictive models
@@ -154,6 +155,7 @@ class GeneralPredictor:
         :raises: Raises errors for various invalid configurations or unsupported operation parameters.
         """
         self.continue_b = continue_b
+        self.skeletonize = skeletonize
         self.transformation, self.px, self.image = None, None, None
         self.tardis_logo = tardis_logo
         self.tardis_progress = None
@@ -814,20 +816,6 @@ class GeneralPredictor:
             else:
                 assert assert_b, msg
 
-            # Calculate parameters for image pixel size with optional scaling
-            if self.correct_px is not None:
-                self.px = self.correct_px
-
-            if self.normalize_px is not None:
-                self.scale_factor = self.px / self.normalize_px
-            else:
-                self.scale_factor = 1.0
-
-            self.org_shape = self.image.shape
-            self.scale_shape = np.multiply(self.org_shape, self.scale_factor).astype(
-                np.int16
-            )
-            self.scale_shape = [int(i) for i in self.scale_shape]
         elif self.amira_image and self.binary_mask:
             # Check image structure
             self.image = np.where(self.image > 0, 1, 0).astype(np.int8)
@@ -843,6 +831,21 @@ class GeneralPredictor:
                     sys.exit()
             else:
                 assert assert_b, msg
+
+        # Calculate parameters for image pixel size with optional scaling
+        if self.correct_px is not None:
+            self.px = self.correct_px
+
+        if self.normalize_px is not None:
+            self.scale_factor = self.px / self.normalize_px
+        else:
+            self.scale_factor = 1.0
+
+        self.org_shape = self.image.shape
+        self.scale_shape = np.multiply(self.org_shape, self.scale_factor).astype(
+            np.int16
+        )
+        self.scale_shape = [int(i) for i in self.scale_shape]
 
         if self.image.ndim == 2 or self.predict == "Microtubule_tirf":
             self.expect_2d = True
@@ -1017,15 +1020,15 @@ class GeneralPredictor:
             # Post-process predicted image patches
             if self.predict in ["Actin", "Microtubule", "General_filament"]:
                 self.pc_hd, self.pc_ld = self.post_processes.build_point_cloud(
-                    image=self.image, down_sampling=5
+                    image=self.image, down_sampling=5, skeletonize=self.skeletonize
                 )
             elif self.predict in ["Membrane2D", "Microtubule_tirf"]:
                 self.pc_hd, self.pc_ld = self.post_processes.build_point_cloud(
-                    image=self.image, down_sampling=5, as_2d=True
+                    image=self.image, down_sampling=5, as_2d=True, skeletonize=self.skeletonize
                 )
             else:
                 self.pc_hd, self.pc_ld = self.post_processes.build_point_cloud(
-                    image=self.image, down_sampling=5, as_2d=True
+                    image=self.image, down_sampling=5, as_2d=True, skeletonize=self.skeletonize
                 )
 
             self.image = None
@@ -1034,6 +1037,8 @@ class GeneralPredictor:
             self.pc_hd = resample_filament(self.pc_hd, self.px)
             down_sample = VoxelDownSampling(voxel=5, labels=False, KNN=True)
             self.pc_ld = down_sample(coord=self.pc_hd[:, 1:])
+
+        self.pc_ld = merge_close_points(self.pc_ld, 2)
 
     def predict_DIST(self, id_i: int, id_name: str):
         """
@@ -1777,6 +1782,7 @@ class GeneralPredictor:
         semantic_output, instance_output, instance_filter_output = [], [], []
         for id_, i in enumerate(self.predict_list):
             start_predict = time.time()
+            end_predict = start_predict
 
             """CNN Pre-Processing"""
             if isinstance(i, str):

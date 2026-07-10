@@ -13,12 +13,36 @@ from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
+from scipy.spatial import cKDTree
 from sklearn.neighbors import KDTree
 
 from tardis_em.utils.errors import TardisError
 from tardis_em_analysis.utils import pc_median_dist, point_in_bb
 
 logger = logging.getLogger(__name__)
+
+
+def merge_close_points(coord: np.ndarray, radius: float) -> np.ndarray:
+    if len(coord) == 0:
+        return coord
+
+    parent = np.arange(len(coord))
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for a, b in cKDTree(coord).query_pairs(r=radius):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    clusters = {}
+    for i in range(len(coord)):
+        clusters.setdefault(find(i), []).append(i)
+    return np.array([coord[idx].mean(axis=0) for idx in clusters.values()])
 
 
 class DownSampling:
